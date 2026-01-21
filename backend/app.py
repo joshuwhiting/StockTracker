@@ -1,8 +1,11 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
+from flask_cors import CORS
 import yfinance as yf
 
 app = Flask(__name__)
+CORS(app)
 
 tracked_symbols = []
 # SQLite config
@@ -49,7 +52,38 @@ def fetch_stock_data(symbol):
 
 @app.route("/ping")
 def ping():
-    return jsonify({"status": "ok"})
+    health_status = {
+        "server": "online",
+        "database": "disconnected",
+       # "yfinance": "unreachable"
+    }
+    try:
+        db.session.execute(text("SELECT 1"))
+        health_status["database"] = "connected"
+    except Exception as e:
+        health_status["database"] = f"error: {str(e)}"
+
+    overall_status = 200 if all(v in ["online", "connected"] for v in health_status.values()) else 503
+
+    return jsonify(health_status),overall_status
+
+@app.route("/refresh", methods=["POST"])
+def refresh_all():
+    stocks = TrackedStock.query.all()
+
+    for s in stocks:
+        try:
+            new_data = fetch_stock_data(s.symbol)
+            print(f"DEBUG: {s.symbol} fetched data: {new_data}")
+
+            if new_data.get("price"):
+                s.current_price = new_data.get("price")
+                s.market_cap = new_data.get("market_cap")
+        except Exception as e:
+            print(f"Failed to update {s.symbol}: {e}")
+            continue
+    db.session.commit()
+    return jsonify({"message": f"Updated {len(stocks)} stocks successfully"}), 200
 
 @app.route("/stock")
 def stock():
@@ -57,9 +91,26 @@ def stock():
     stock_data = fetch_stock_data(symbol)
     return jsonify({"symbol": symbol, **stock_data})
 
+@app.route("/tracked/<int:id>", methods=["DELETE"])
+def delete_stock(id):
+    stock_to_delete = TrackedStock.query.get_or_404(id)
 
+    try:
+        db.session.delete(stock_to_delete)
+        db.session.commit()
+        return jsonify({"message": "Stock was deleted succesfully"})
+    except:
+        return jsonify({"error":"There was an error deleteing that stock"})
+    
 @app.route("/track", methods=["POST"])
 def track():
+
+    # data = request.get_json(force=True)
+    # symbol = data.get("symbol", "").upper()
+    # print(f"--- Attempting to track: {symbol} ---") # DEBUG PRINT
+
+    # stock_data = fetch_stock_data(symbol)
+    # print(f"--- Data fetched: {stock_data} ---")
 
     data = request.get_json(force=True)
     symbol = data.get("symbol")
@@ -91,7 +142,7 @@ def track():
             tracked = TrackedStock(symbol=symbol)
 
     tracked.current_price = stock_data["price"]
-    tracked.market_cap = format_market_cap(stock_data["market_cap"])
+    tracked.market_cap = stock_data["market_cap"]
     tracked.currency = stock_data["currency"]
 
     db.session.add(tracked)
@@ -106,7 +157,7 @@ def tracked():
     return jsonify([
         {
             "symbol": s.symbol,
-            "price": s.price,
+            "price": s.current_price,
             "market_cap": format_market_cap(s.market_cap),
             "currency": s.currency
         }
@@ -117,4 +168,4 @@ def tracked():
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    app.run(debug=True, port=8000)
