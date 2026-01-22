@@ -4,8 +4,8 @@ from sqlalchemy import text
 from flask_cors import CORS
 import yfinance as yf
 
-app = Flask(__name__)
-CORS(app)
+app = Flask(__name__) #create the flask app
+CORS(app) 
 
 tracked_symbols = []
 # SQLite config
