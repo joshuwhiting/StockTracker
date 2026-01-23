@@ -3,6 +3,9 @@ import Chart from 'react-apexcharts';
 import { RefreshCw, Settings, Search, LayoutGrid, Activity } from 'lucide-react';
 import SidebarItem from './components/SideBarItem';
 import './index.css';
+import { io } from 'socket.io-client';
+
+const socket = io('http://127.0.0.1:8000');
 
 export default function App() {
   const [stocks, setStocks] = useState([]);
@@ -17,6 +20,30 @@ export default function App() {
     yaxis: { tooltip: { enabled: true } },
     grid: { borderColor: '#f1f1f1' }
   };
+
+  // NEW: Socket listener effect
+  useEffect(() => {
+    socket.on('price_update', (data) => {
+      // 1. Update the main list
+      setStocks((currentStocks) =>
+        currentStocks.map((s) =>
+          s.symbol === data.symbol
+            ? { ...s, price: data.price, change: data.change, percent: data.percent }
+            : s
+        )
+      );
+
+      // 2. Update the header if the updated stock is currently selected
+      setSelectedStock((currentSelected) => {
+        if (currentSelected?.symbol === data.symbol) {
+          return { ...currentSelected, price: data.price, change: data.change, percent: data.percent };
+        }
+        return currentSelected;
+      });
+    });
+
+    return () => socket.off('price_update');
+  }, []);
 
   const fetchStocks = async () => {
     try {
@@ -76,7 +103,7 @@ export default function App() {
       }
     };
     fetchHistory();
-  }, [selectedStock]);
+  }, [selectedStock?.symbol]);
 
   return (
     <div className="flex h-screen w-full bg-[#f8f9fa] overflow-hidden text-gray-900 font-sans">
@@ -138,11 +165,11 @@ export default function App() {
                 <span className="text-gray-400 text-sm">Apple Inc.</span>
               </div>
               <div className="flex items-baseline gap-4 mt-1">
-                <span className="text-4xl font-mono font-medium tracking-tighter">
+                <span className="text-4xl font-mono font-medium tracking-tighter text-stock-up animate-pulse-short">
                   {selectedStock?.price?.toFixed(2) || '0.00'}
                 </span>
                 <span className={`text-lg font-semibold ${selectedStock?.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {selectedStock?.change > 0 ? '+' : ''}{selectedStock?.change?.toFixed(2)} (0.28%)
+                  {selectedStock?.change > 0 ? '+' : ''}{selectedStock?.change?.toFixed(2)} ({selectedStock?.percent}%)
                 </span>
               </div>
             </div>

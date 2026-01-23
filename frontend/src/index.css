@@ -1,1 +1,9 @@
 @import "tailwindcss";
+@keyframes pulse-green {
+  0% { color: #26a69a; }
+  50% { color: #80cbc4; }
+  100% { color: #26a69a; }
+}
+.animate-pulse-short {
+  animation: pulse-green 0.5s ease-in-out;
+}

@@ -3,12 +3,20 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 from flask_cors import CORS
 import yfinance as yf
+from flask_socketio import SocketIO, emit
+import threading
+import time
+import warnings
 
 app = Flask(__name__) #create the flask app
 CORS(app) 
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 tracked_symbols = []
 # SQLite config
+
+warnings.filterwarnings("ignore",message="Timestamp.utcnow is deprecated")
+
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -98,20 +106,12 @@ def delete_stock(id):
     try:
         db.session.delete(stock_to_delete)
         db.session.commit()
-        return jsonify({"message": "Stock was deleted succesfully"})
-    except:
-        return jsonify({"error":"There was an error deleteing that stock"})
+        return jsonify({"message": "Stock was deleted successfully"})
+    except Exception as e:
+        return jsonify({"error": "There was an error deleting that stock"}), 500
     
 @app.route("/track", methods=["POST"])
 def track():
-
-    # data = request.get_json(force=True)
-    # symbol = data.get("symbol", "").upper()
-    # print(f"--- Attempting to track: {symbol} ---") # DEBUG PRINT
-
-    # stock_data = fetch_stock_data(symbol)
-    # print(f"--- Data fetched: {stock_data} ---")
-
     data = request.get_json(force=True)
     symbol = data.get("symbol")
     if not symbol:
@@ -147,7 +147,7 @@ def track():
 
     db.session.add(tracked)
     db.session.commit()
-    return {"message": f"{symbol} tracked", **stock_data}, 201
+    return {"message": f"{symbol} tracked", "id": tracked.id, **stock_data}, 201
 
 
 
@@ -156,6 +156,7 @@ def tracked():
     stocks = TrackedStock.query.all()
     return jsonify([
         {
+            "id": s.id,
             "symbol": s.symbol,
             "price": s.current_price,
             "market_cap": format_market_cap(s.market_cap),
@@ -164,8 +165,43 @@ def tracked():
         for s in stocks
     ])
 
+def background_price_update():
+    """Background thread that polls YFinance and emits to React."""
+    print("Background Price Poller Started...")
+    while True:
+        with app.app_context():
+            stocks = TrackedStock.query.all()
+            for s in stocks:
+                try:
+                    # Get the absolute latest data
+                    ticker = yf.Ticker(s.symbol)
+                    fast_info = ticker.fast_info # faster than .info
+                    
+                    price = fast_info.last_price
+                    change_pct = ((price - fast_info.previous_close) / fast_info.previous_close) * 100
+                    
+                    # Broadcast to ALL connected React clients
+                    socketio.emit('price_update', {
+                        "symbol": s.symbol,
+                        "price": round(price, 2),
+                        "change": round(price - fast_info.previous_close, 2),
+                        "percent": round(change_pct, 2)
+                    })
+                except Exception as e:
+                    print(f"Polling error for {s.symbol}: {e}")
+        
+        time.sleep(10) # Wait 10 seconds before next update to avoid Yahoo rate limits
+
+@socketio.on('connect')
+def handle_connect():
+    print("Client connected")
 
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(debug=True, port=8000)
+    
+    # Start the background poller
+    threading.Thread(target=background_price_update, daemon=True).start()
+    
+    # IMPORTANT: Use socketio.run instead of app.run
+    socketio.run(app, debug=True, port=8000)
