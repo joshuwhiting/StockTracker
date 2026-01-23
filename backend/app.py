@@ -165,6 +165,30 @@ def tracked():
         for s in stocks
     ])
 
+@app.route("/history/<symbol>")
+def history(symbol):
+    symbol = symbol.upper()
+    try:
+        ticker = yf.Ticker(symbol)
+        # Fetch 1 year of daily data
+        hist = ticker.history(period="1y", interval="1d")
+        
+        data = []
+        for date, row in hist.iterrows():
+            data.append({
+                "x": date.strftime('%Y-%m-%d'),
+                "y": [
+                    round(row["Open"], 2),
+                    round(row["High"], 2),
+                    round(row["Low"], 2),
+                    round(row["Close"], 2)
+                ]
+            })
+        return jsonify(data)
+    except Exception as e:
+        print(f"Error fetching history for {symbol}: {e}")
+        return jsonify([])
+
 def background_price_update():
     """Background thread that polls YFinance and emits to React."""
     print("Background Price Poller Started...")
