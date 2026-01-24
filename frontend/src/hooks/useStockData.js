@@ -1,0 +1,147 @@
+import { useState, useEffect, useCallback } from "react";
+import { io } from "socket.io-client";
+
+// Initialize socket outside the hook to prevent multiple connections
+const socket = io("http://127.0.0.1:8000");
+
+export const useStockData = () => {
+  const [stocks, setStocks] = useState([]);
+  const [selectedStock, setSelectedStock] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [chartSeries, setChartSeries] = useState([{ data: [] }]);
+
+  // Socket listener for real-time updates
+  useEffect(() => {
+    const handlePriceUpdate = (data) => {
+      // 1. Update the main list
+      setStocks((currentStocks) =>
+        currentStocks.map((s) =>
+          s.symbol === data.symbol
+            ? {
+                ...s,
+                price: data.price,
+                change: data.change,
+                percent: data.percent,
+              }
+            : s
+        )
+      );
+
+      // 2. Update the header if the updated stock is currently selected
+      setSelectedStock((currentSelected) => {
+        if (currentSelected?.symbol === data.symbol) {
+          return {
+            ...currentSelected,
+            price: data.price,
+            change: data.change,
+            percent: data.percent,
+          };
+        }
+        return currentSelected;
+      });
+    };
+
+    socket.on("price_update", handlePriceUpdate);
+    return () => socket.off("price_update", handlePriceUpdate);
+  }, []);
+
+  const fetchStocks = useCallback(async () => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/tracked");
+      const data = await response.json();
+      setStocks(data);
+
+      // Update selectedStock based on new data
+      setSelectedStock((prevSelected) => {
+        if (prevSelected) {
+          const updated = data.find((s) => s.symbol === prevSelected.symbol);
+          return updated || prevSelected;
+        } else if (data.length > 0) {
+          return data[0];
+        }
+        return null;
+      });
+    } catch (error) {
+      console.error("Error fetching stocks:", error);
+    }
+  }, []);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchStocks();
+  }, [fetchStocks]);
+
+  // Fetch history when selected stock changes
+  useEffect(() => {
+    if (!selectedStock) return;
+    const fetchHistory = async () => {
+      try {
+        const res = await fetch(
+          `http://127.0.0.1:8000/history/${selectedStock.symbol}`
+        );
+        const data = await res.json();
+        setChartSeries([{ data }]);
+      } catch (e) {
+        console.error("Error fetching history:", e);
+      }
+    };
+    fetchHistory();
+  }, [selectedStock?.symbol]);
+
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      await fetch("http://127.0.0.1:8000/refresh", { method: "POST" });
+      await fetchStocks();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTrackStock = async (symbol) => {
+    if (!symbol) return false;
+    setLoading(true);
+    try {
+      await fetch("http://127.0.0.1:8000/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol }),
+      });
+      await fetchStocks();
+      return true;
+    } catch (e) {
+      console.error("Error tracking stock:", e);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (e, id) => {
+    e.stopPropagation();
+    if (!window.confirm("Remove this stock?")) return;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/tracked/${id}`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        setStocks((prev) => prev.filter((s) => s.id !== id));
+        setSelectedStock((prev) => (prev?.id === id ? null : prev));
+      }
+    } catch (error) {
+      console.error("Delete Failed:", error);
+    }
+  };
+
+  return {
+    stocks,
+    selectedStock,
+    setSelectedStock,
+    loading,
+    chartSeries,
+    handleRefresh,
+    handleTrackStock,
+    handleDelete,
+  };
+};

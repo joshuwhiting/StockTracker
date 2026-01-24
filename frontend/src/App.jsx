@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Chart from "react-apexcharts";
 import {
   RefreshCw,
@@ -9,16 +9,21 @@ import {
 } from "lucide-react";
 import SidebarItem from "./components/SideBarItem";
 import "./index.css";
-import { io } from "socket.io-client";
-
-const socket = io("http://127.0.0.1:8000");
+import { useStockData } from "./hooks/useStockData";
 
 export default function App() {
-  const [stocks, setStocks] = useState([]);
-  const [selectedStock, setSelectedStock] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [chartSeries, setChartSeries] = useState([{ data: [] }]);
   const [newSymbol, setNewSymbol] = useState("");
+
+  const {
+    stocks,
+    selectedStock,
+    setSelectedStock,
+    loading,
+    chartSeries,
+    handleRefresh,
+    handleTrackStock,
+    handleDelete,
+  } = useStockData();
 
   const chartOptions = {
     chart: {
@@ -32,120 +37,10 @@ export default function App() {
     grid: { borderColor: "#f1f1f1" },
   };
 
-  // NEW: Socket listener effect
-  useEffect(() => {
-    socket.on("price_update", (data) => {
-      // 1. Update the main list
-      setStocks((currentStocks) =>
-        currentStocks.map((s) =>
-          s.symbol === data.symbol
-            ? {
-                ...s,
-                price: data.price,
-                change: data.change,
-                percent: data.percent,
-              }
-            : s,
-        ),
-      );
-
-      // 2. Update the header if the updated stock is currently selected
-      setSelectedStock((currentSelected) => {
-        if (currentSelected?.symbol === data.symbol) {
-          return {
-            ...currentSelected,
-            price: data.price,
-            change: data.change,
-            percent: data.percent,
-          };
-        }
-        return currentSelected;
-      });
-    });
-
-    return () => socket.off("price_update");
-  }, []);
-
-  const fetchStocks = async () => {
-    try {
-      const response = await fetch("http://127.0.0.1:8000/tracked");
-      const data = await response.json();
-      setStocks(data);
-      if (selectedStock) {
-        const updated = data.find((s) => s.symbol === selectedStock.symbol);
-        if (updated) setSelectedStock(updated);
-      } else if (data.length > 0) {
-        setSelectedStock(data[0]);
-      }
-    } catch (error) {
-      console.error("Error fetching stocks:", error);
-    }
+  const onAddStock = async () => {
+    const success = await handleTrackStock(newSymbol);
+    if (success) setNewSymbol("");
   };
-
-  const handleRefresh = async () => {
-    setLoading(true);
-    try {
-      await fetch("http://127.0.0.1:8000/refresh", { method: "POST" });
-      await fetchStocks();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleTrackStock = async () => {
-    if (!newSymbol) return;
-    setLoading(true);
-    try {
-      await fetch("http://127.0.0.1:8000/track", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol: newSymbol }),
-      });
-      setNewSymbol("");
-      await fetchStocks();
-    } catch (e) {
-      console.error("Error tracking stock:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async (e, id) => {
-    e.stopPropagation(); //stops user from selecting the stock
-    if (!window.confirm("Remove this stock?")) return;
-
-    try {
-      const response = await fetch(`http://127.0.0.1:8000/tracked/${id}`, {
-        method: "DELETE",
-      });
-      if (response.ok) {
-        setStocks(stocks.filter((s) => s.id !== id));
-        if (selectedStock?.id === id) setSelectedStock(null);
-      }
-    } catch (error) {
-      console.error("Delete Failed:", error);
-    }
-  };
-
-  useEffect(() => {
-    fetchStocks();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedStock) return;
-    const fetchHistory = async () => {
-      try {
-        const res = await fetch(
-          `http://127.0.0.1:8000/history/${selectedStock.symbol}`,
-        );
-        const data = await res.json();
-        setChartSeries([{ data }]);
-      } catch (e) {
-        console.error("Error fetching history:", e);
-      }
-    };
-    fetchHistory();
-  }, [selectedStock?.symbol]);
 
   return (
     <div className="flex h-screen w-full bg-[#f8f9fa] overflow-hidden text-gray-900 font-sans">
@@ -181,7 +76,7 @@ export default function App() {
               placeholder="Track Symbol (e.g. AAPL)"
               value={newSymbol}
               onChange={(e) => setNewSymbol(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleTrackStock()}
+              onKeyDown={(e) => e.key === "Enter" && onAddStock()}
             />
           </div>
         </div>
