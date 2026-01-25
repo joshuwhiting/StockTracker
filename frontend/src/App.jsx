@@ -1,15 +1,11 @@
 import React, { useState } from "react";
-import Chart from "react-apexcharts";
-import {
-  RefreshCw,
-  Settings,
-  Search,
-  LayoutGrid,
-  Activity,
-} from "lucide-react";
+import { RefreshCw, Settings, Search, LayoutGrid } from "lucide-react";
 import SidebarItem from "./components/SideBarItem";
 import "./index.css";
 import { useStockData } from "./hooks/useStockData";
+import MarketTicker from "./components/MarketTicker";
+import StockChart from "./components/StockChart";
+import StockHeader from "./components/StockHeader";
 
 export default function App() {
   const [newSymbol, setNewSymbol] = useState("");
@@ -24,18 +20,6 @@ export default function App() {
     handleTrackStock,
     handleDelete,
   } = useStockData();
-
-  const chartOptions = {
-    chart: {
-      type: "candlestick",
-      height: 350,
-      toolbar: { show: false },
-      background: "#fff",
-    },
-    xaxis: { type: "datetime" },
-    yaxis: { tooltip: { enabled: true } },
-    grid: { borderColor: "#f1f1f1" },
-  };
 
   const onAddStock = async () => {
     const success = await handleTrackStock(newSymbol);
@@ -75,7 +59,7 @@ export default function App() {
               className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-md focus:outline-none focus:border-blue-500"
               placeholder="Track Symbol (e.g. AAPL)"
               value={newSymbol}
-              onChange={(e) => setNewSymbol(e.target.value)}
+              onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === "Enter" && onAddStock()}
             />
           </div>
@@ -97,79 +81,14 @@ export default function App() {
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Top Market Bar */}
-        <header className="h-10 bg-[#0a0a0a] text-white flex items-center px-4 text-[10px] font-medium gap-8 overflow-x-auto">
-          <div className="flex gap-4">
-            <span>
-              DOW <span className="text-green-400">23858.67 +0.77%</span>
-            </span>
-            <span>
-              NASDAQ <span className="text-green-400">6847.71 +0.94%</span>
-            </span>
-            <span>
-              S&P 500 <span className="text-green-400">2566.83 +0.81%</span>
-            </span>
-          </div>
-        </header>
+        <MarketTicker />
 
         {/* Dynamic Header */}
-        <div className="p-6 bg-white border-b border-gray-200">
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="flex items-baseline gap-3">
-                <h1 className="text-3xl font-light text-gray-800">
-                  {selectedStock?.symbol || "---"}
-                </h1>
-                <span className="text-gray-400 text-sm">Apple Inc.</span>
-              </div>
-              <div className="flex items-baseline gap-4 mt-1">
-                <span className="text-4xl font-mono font-medium tracking-tighter text-stock-up animate-pulse-short">
-                  {selectedStock?.price?.toFixed(2) || "0.00"}
-                </span>
-                <span
-                  className={`text-lg font-semibold ${selectedStock?.change >= 0 ? "text-green-600" : "text-red-600"}`}
-                >
-                  {selectedStock?.change > 0 ? "+" : ""}
-                  {selectedStock?.change?.toFixed(2)} ({selectedStock?.percent}
-                  %)
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs text-gray-500 font-mono">
-              <p>
-                OPEN <span className="text-gray-900 ml-2">166.00</span>
-              </p>
-              <p>
-                HIGH <span className="text-gray-900 ml-2">167.43</span>
-              </p>
-              <p>
-                LOW <span className="text-gray-900 ml-2">164.96</span>
-              </p>
-              <p>
-                MKT CAP{" "}
-                <span className="text-gray-900 ml-2">
-                  {selectedStock?.market_cap || "---"}
-                </span>
-              </p>
-            </div>
-          </div>
-        </div>
+        <StockHeader selectedStock={selectedStock} />
 
         {/* Charts Section */}
         <div className="p-6 flex-1 overflow-y-auto bg-gray-50/50">
-          <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between mb-4 border-b border-gray-50 pb-2">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                <Activity size={12} /> Price Action (Daily)
-              </span>
-            </div>
-            <Chart
-              options={chartOptions}
-              series={chartSeries}
-              type="candlestick"
-              height={400}
-            />
-          </div>
+          <StockChart series={chartSeries} />
 
           {/* Secondary Indicators */}
           <div className="mt-6 grid grid-cols-1 gap-6">

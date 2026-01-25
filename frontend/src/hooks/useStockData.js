@@ -35,6 +35,11 @@ export const useStockData = () => {
             price: data.price,
             change: data.change,
             percent: data.percent,
+            longName: data.longName,
+            open: data.open,
+            dayLow: data.day_low,
+            dayHigh: data.day_high,
+            price_change: data.price_change
           };
         }
         return currentSelected;

@@ -27,9 +27,14 @@ db = SQLAlchemy(app)
 class TrackedStock(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     symbol = db.Column(db.String(10), nullable=False, unique=True)
+    long_name = db.Column(db.String(100)) 
     current_price = db.Column(db.Float)
+    price_change = db.Column(db.Float)
     market_cap = db.Column(db.BigInteger)
     currency = db.Column(db.String(10))
+    open_price = db.Column(db.Float) 
+    day_high = db.Column(db.Float)   
+    day_low = db.Column(db.Float)    
 
 # ---------- Helper ----------
 def format_market_cap(value):
@@ -49,10 +54,24 @@ def fetch_stock_data(symbol):
     """Fetch current price, market cap, and currency from YFinance."""
     ticker = yf.Ticker(symbol)
     info = ticker.info
+
+    prev_close = info.get("previousClose")
+    current_price = info.get("currentPrice")
+    
+    # Calculate percent change safely
+    change_pct = 0
+    if current_price and prev_close:
+        change_pct = ((current_price - prev_close) / prev_close) * 100
+
     return {
         "price": info.get("currentPrice"),
         "market_cap": info.get("marketCap"),
-        "currency": info.get("currency")
+        "currency": info.get("currency"),
+        "longName": info.get("longName"),      
+        "open": info.get("open"),         
+        "dayHigh": info.get("dayHigh"),
+        "dayLow": info.get("dayLow"),
+        "percent_change": round(change_pct, 2)
     }
 
 # ---------- Routes ----------
@@ -84,9 +103,15 @@ def refresh_all():
             new_data = fetch_stock_data(s.symbol)
             print(f"DEBUG: {s.symbol} fetched data: {new_data}")
 
-            if new_data.get("price"):
-                s.current_price = new_data.get("price")
-                s.market_cap = new_data.get("market_cap")
+            # Update all fields, using .get() with a fallback to the existing value
+            s.current_price = new_data.get("price", s.current_price)
+            s.market_cap = new_data.get("market_cap", s.market_cap)
+            s.currency = new_data.get("currency", s.currency)
+            s.day_high = new_data.get("dayHigh", s.day_high)
+            s.day_low = new_data.get("dayLow", s.day_low)
+            s.long_name = new_data.get("longName", s.long_name)
+            s.open_price = new_data.get("open", s.open_price)
+            s.price_change = new_data.get("percent_change", s.price_change)
         except Exception as e:
             print(f"Failed to update {s.symbol}: {e}")
             continue
@@ -144,6 +169,11 @@ def track():
     tracked.current_price = stock_data["price"]
     tracked.market_cap = stock_data["market_cap"]
     tracked.currency = stock_data["currency"]
+    tracked.day_high = stock_data["dayHigh"]
+    tracked.day_low = stock_data["dayLow"]
+    tracked.long_name = stock_data["longName"]
+    tracked.open_price = stock_data["open"]
+    tracked.price_change = stock_data["percent_change"]
 
     db.session.add(tracked)
     db.session.commit()
@@ -154,16 +184,28 @@ def track():
 @app.route("/tracked")
 def tracked():
     stocks = TrackedStock.query.all()
-    return jsonify([
-        {
+    results = []
+    for s in stocks:
+        # Calculate absolute change from stored percentage if available
+        change_absolute = 0
+        if s.current_price and s.price_change:
+            prev_close = s.current_price / (1 + (s.price_change / 100))
+            change_absolute = s.current_price - prev_close
+
+        results.append({
             "id": s.id,
             "symbol": s.symbol,
             "price": s.current_price,
             "market_cap": format_market_cap(s.market_cap),
-            "currency": s.currency
-        }
-        for s in stocks
-    ])
+            "currency": s.currency,
+            "longName": s.long_name,      
+            "open": s.open_price,         
+            "dayHigh": s.day_high,        
+            "dayLow": s.day_low,
+            "percent": s.price_change,
+            "change": round(change_absolute, 2)
+        })
+    return jsonify(results)
 
 @app.route("/history/<symbol>")
 def history(symbol):
@@ -199,17 +241,28 @@ def background_price_update():
                 try:
                     # Get the absolute latest data
                     ticker = yf.Ticker(s.symbol)
-                    fast_info = ticker.fast_info # faster than .info
+                    # Use .info for consistency with other endpoints
+                    info = ticker.info
                     
-                    price = fast_info.last_price
-                    change_pct = ((price - fast_info.previous_close) / fast_info.previous_close) * 100
+                    price = info.get("currentPrice")
+                    prev_close = info.get("previousClose")
+
+                    if not price or not prev_close:
+                        print(f"Polling: Incomplete data for {s.symbol}, skipping update.")
+                        continue
+
+                    change_pct = ((price - prev_close) / prev_close) * 100
                     
                     # Broadcast to ALL connected React clients
                     socketio.emit('price_update', {
                         "symbol": s.symbol,
                         "price": round(price, 2),
-                        "change": round(price - fast_info.previous_close, 2),
-                        "percent": round(change_pct, 2)
+                        "change": round(price - prev_close, 2),
+                        "percent": round(change_pct, 2),
+                        "open": info.get("open"),
+                        "dayHigh": info.get("dayHigh"),
+                        "dayLow": info.get("dayLow"),
+                        "longName": info.get("longName")
                     })
                 except Exception as e:
                     print(f"Polling error for {s.symbol}: {e}")
