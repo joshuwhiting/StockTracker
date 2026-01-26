@@ -15,11 +15,6 @@ A lightweight application to monitor real-time stock prices and manage your inve
 * **Framework:** [e.g., Flask / React / Express]
 * **API:** Powered by [e.g., Alpha Vantage / Yahoo Finance]
 
-## Prerequisites
-
-Before you begin, ensure you have the following installed:
-* [e.g., Python 3.x or Node.js]
-* A valid API Key from your data provider.
 
 ## Installation & Setup
 
@@ -32,4 +27,4 @@ Before you begin, ensure you have the following installed:
    cd frontend
    npm run dev
    cd backend and hit run or
-   flask --app app run --port 8000```
+   flask --app app run --port 8000
