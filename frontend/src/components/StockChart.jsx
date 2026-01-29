@@ -87,8 +87,8 @@ const StockChart = ({
     annotations: isRSI
       ? {
           yaxis: [
-            { y: 70, borderColor: "#f87171", label: { text: "Overbought" } },
-            { y: 30, borderColor: "#60a5fa", label: { text: "Oversold" } },
+            { y: 70, borderColor: "#f87171" },
+            { y: 30, borderColor: "#60a5fa" },
           ],
         }
       : {
