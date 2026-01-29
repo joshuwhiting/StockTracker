@@ -2,7 +2,15 @@ import React from "react";
 import Chart from "react-apexcharts";
 import { Activity } from "lucide-react";
 
-const StockChart = ({ series, type = "price", height = 350 }) => {
+const StockChart = ({
+  series,
+  type = "price",
+  height = 350,
+  timeRange,
+  setTimeRange,
+  interval,
+  setInterval,
+}) => {
   const isRSI = type === "rsi";
 
   const chartOptions = {
@@ -43,13 +51,107 @@ const StockChart = ({ series, type = "price", height = 350 }) => {
       : {},
   };
 
+  const handleRangeChange = (newRange) => {
+    setTimeRange(newRange);
+
+    // 1m interval is only valid for 1d and 5d ranges
+    if (interval === "1m" && !["1d", "5d"].includes(newRange)) {
+      setInterval("5m");
+    }
+    // Intraday (minutes) generally not available > 60 days
+    else if (
+      ["6mo", "1y", "5y", "max"].includes(newRange) &&
+      ["1m", "5m", "15m"].includes(interval)
+    ) {
+      setInterval("1d");
+    }
+    // Hourly not available > 730 days
+    else if (["5y", "max"].includes(newRange) && interval === "1h") {
+      setInterval("1d");
+    }
+  };
+
+  const handleIntervalChange = (newInterval) => {
+    setInterval(newInterval);
+
+    // 1m needs short range (max 7d)
+    if (newInterval === "1m" && !["1d", "5d"].includes(timeRange)) {
+      setTimeRange("1d");
+    }
+    // 5m/15m needs < 60d
+    else if (
+      ["5m", "15m"].includes(newInterval) &&
+      ["6mo", "1y", "5y", "max"].includes(timeRange)
+    ) {
+      setTimeRange("1mo");
+    }
+    // 1h needs < 730d
+    else if (newInterval === "1h" && ["5y", "max"].includes(timeRange)) {
+      setTimeRange("1y");
+    }
+  };
+
+  const ranges = [
+    { label: "1D", value: "1d" },
+    { label: "5D", value: "5d" },
+    { label: "1M", value: "1mo" },
+    { label: "6M", value: "6mo" },
+    { label: "1Y", value: "1y" },
+    { label: "5Y", value: "5y" },
+    { label: "Max", value: "max" },
+  ];
+
+  const intervals = [
+    { label: "1m", value: "1m" },
+    { label: "5m", value: "5m" },
+    { label: "15m", value: "15m" },
+    { label: "1h", value: "1h" },
+    { label: "1d", value: "1d" },
+  ];
+
   return (
     <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-sm">
       <div className="flex items-center justify-between mb-4 border-b border-gray-50 pb-2">
         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
           <Activity size={12} />{" "}
-          {isRSI ? "Relative Strength Index (14)" : "Price Action (Daily)"}
+          {isRSI ? "Relative Strength Index (14)" : "Price Action"}
         </span>
+
+        {!isRSI && (
+          <div className="flex gap-3">
+            <div className="flex gap-1 bg-gray-50 p-0.5 rounded-md">
+              {ranges.map((r) => (
+                <button
+                  key={r.value}
+                  onClick={() => handleRangeChange(r.value)}
+                  className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
+                    timeRange === r.value
+                      ? "bg-white shadow-sm text-blue-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <div className="w-px bg-gray-200 mx-1"></div>
+            <div className="flex gap-1 bg-gray-50 p-0.5 rounded-md">
+              {intervals.map((i) => (
+                <button
+                  key={i.value}
+                  onClick={() => handleIntervalChange(i.value)}
+                  className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
+                    interval === i.value
+                      ? "bg-white shadow-sm text-blue-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {i.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       <Chart
         options={chartOptions}

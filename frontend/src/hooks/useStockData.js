@@ -10,6 +10,8 @@ export const useStockData = () => {
   const [loading, setLoading] = useState(false);
   const [chartSeries, setChartSeries] = useState([{ data: [] }]);
   const [rsiSeries, setRsiSeries] = useState([{ data: [] }]);
+  const [timeRange, setTimeRange] = useState("1y");
+  const [interval, setInterval] = useState("1d");
 
   // Socket listener for real-time updates
   useEffect(() => {
@@ -86,8 +88,9 @@ export const useStockData = () => {
     }
     const fetchHistory = async () => {
       try {
+        const params = new URLSearchParams({ period: timeRange, interval });
         const res = await fetch(
-          `http://127.0.0.1:8000/history/${selectedStock.symbol}`,
+          `http://127.0.0.1:8000/history/${selectedStock.symbol}?${params}`,
         );
         const data = await res.json();
         setChartSeries([{ data }]);
@@ -96,7 +99,7 @@ export const useStockData = () => {
       }
     };
     fetchHistory();
-  }, [selectedStock?.symbol]);
+  }, [selectedStock?.symbol, timeRange, interval]);
 
   useEffect(() => {
     if (!selectedStock) {
@@ -107,8 +110,9 @@ export const useStockData = () => {
 
     const fetchRSI = async () => {
       try {
+        const params = new URLSearchParams({ period: timeRange, interval });
         const res = await fetch(
-          `http://127.0.0.1:8000/rsi/${selectedStock.symbol}`,
+          `http://127.0.0.1:8000/rsi/${selectedStock.symbol}?${params}`,
         );
         const data = await res.json();
 
@@ -120,7 +124,7 @@ export const useStockData = () => {
     };
 
     fetchRSI();
-  }, [selectedStock?.symbol]);
+  }, [selectedStock?.symbol, timeRange, interval]);
 
   const handleRefresh = async () => {
     setLoading(true);
@@ -178,5 +182,9 @@ export const useStockData = () => {
     handleRefresh,
     handleTrackStock,
     handleDelete,
+    timeRange,
+    setTimeRange,
+    interval,
+    setInterval,
   };
 };

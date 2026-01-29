@@ -212,15 +212,21 @@ def tracked():
 @app.route("/history/<symbol>")
 def history(symbol):
     symbol = symbol.upper()
+    period = request.args.get("period", "1y")
+    interval = request.args.get("interval", "1d")
+
     try:
         ticker = yf.Ticker(symbol)
-        # Fetch 1 year of daily data
-        hist = ticker.history(period="1y", interval="1d")
+        hist = ticker.history(period=period, interval=interval)
         
         data = []
         for date, row in hist.iterrows():
+            if interval in ["1d", "5d", "1wk", "1mo", "3mo"]:
+                date_str = date.strftime('%Y-%m-%d')
+            else:
+                date_str = date.strftime('%Y-%m-%d %H:%M')
             data.append({
-                "x": date.strftime('%Y-%m-%d'),
+                "x": date_str,
                 "y": [
                     round(row["Open"], 2),
                     round(row["High"], 2),
@@ -273,25 +279,36 @@ def background_price_update():
         
 @app.route('/rsi/<symbol>')
 def handle_rsi(symbol):
-    df = yf.download(symbol, period="6mo", progress=False)
+    symbol = symbol.upper()
+    period = request.args.get("period", "1y")
+    interval = request.args.get("interval", "1d")
 
-    # Flatten columns if MultiIndex
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
+    try:
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(period=period, interval=interval)
+        
+        if df.empty:
+            return jsonify([])
 
-    df["RSI_14"] = ta.rsi(df["Close"], length=14)
+        df["RSI_14"] = ta.rsi(df["Close"], length=14)
+        df = df.dropna()
 
-    df = df.dropna().tail(30)
+        data = []
+        for idx, row in df.iterrows():
+            if interval in ["1d", "5d", "1wk", "1mo", "3mo"]:
+                date_str = idx.strftime('%Y-%m-%d')
+            else:
+                date_str = idx.strftime('%Y-%m-%d %H:%M')
+            
+            data.append({
+                "x": date_str,
+                "y": round(row["RSI_14"], 2),
+            })
 
-    data = [
-        {
-            "x": idx.strftime("%Y-%m-%d"),
-            "y": round(row["RSI_14"], 2),
-        }
-        for idx, row in df.iterrows()
-    ]
-
-    return jsonify(data)
+        return jsonify(data)
+    except Exception as e:
+        print(f"Error calculating RSI for {symbol}: {e}")
+        return jsonify([])
 
 
 

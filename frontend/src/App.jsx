@@ -20,6 +20,10 @@ export default function App() {
     handleRefresh,
     handleTrackStock,
     handleDelete,
+    timeRange,
+    setTimeRange,
+    interval,
+    setInterval,
   } = useStockData();
 
   const onAddStock = async () => {
@@ -89,7 +93,15 @@ export default function App() {
 
         {/* Charts Section */}
         <div className="p-6 flex-1 overflow-y-auto bg-gray-50/50">
-          <StockChart series={chartSeries} height={350} type="price" />
+          <StockChart
+            series={chartSeries}
+            height={350}
+            type="price"
+            timeRange={timeRange}
+            setTimeRange={setTimeRange}
+            interval={interval}
+            setInterval={setInterval}
+          />
 
           {/* Secondary Indicators */}
           <div className="mt-6 grid grid-cols-1 gap-6">
